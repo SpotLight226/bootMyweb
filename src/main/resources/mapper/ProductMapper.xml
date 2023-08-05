@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.jang226.myweb.product.service.ProductMapper">
+
+    <insert id="productRegist" parameterType="productVO">
+
+        INSERT INTO PRODUCT(prod_enddate,
+                            prod_writer,
+                            prod_name,
+                            prod_price,
+                            prod_count,
+                            prod_discount,
+                            prod_purchase_yn,
+                            prod_content,
+                            prod_comment,
+                            prod_category)
+        VALUES (#{prod_enddate},
+                #{prod_writer},
+                #{prod_name},
+                #{prod_price},
+                #{prod_count},
+                #{prod_discount},
+                #{prod_purchase_yn},
+                #{prod_content},
+                #{prod_comment},
+                #{prod_category})
+    </insert>
+
+    <insert id="productFileRegist" >
+
+        <!-- autoIncrement 인 컬럼의 값을 가져오기 위한 방법
+            selectkey는 insert, update, delete 필요한 키값을 조회해서 가져오는 기능
+            selectKey 절 안에는 select 문장을 적는데, 반드시 단일 값이 나와야 한다
+
+            order : SQL 문을 하기 전에 실행  SQL 하고 실행
+            order="BEFORE"          order="AFTER"
+
+            keyProperty : vo객체 전달, select 한 결과를 맵핑할 setter 메서드명 => 조회한 결과를 어느 vo에 담겠는가
+
+            resultType : select 한 결과의 반환타입
+
+            알아서 prod_id 에 들어간다
+        -->
+        <selectKey order="BEFORE" keyProperty="prod_id" resultType="int">
+            SELECT MAX(prod_id) FROM product WHERE prod_writer = #{prod_writer}
+        </selectKey>
+
+        INSERT INTO PRODUCT_UPLOAD(filename,
+                                   filepath,
+                                   uuid,
+                                   prod_id,
+                                   prod_writer)
+        VALUES (#{filename},
+                #{filepath},
+                #{uuid},
+                #{prod_id},
+                #{prod_writer})
+    </insert>
+
+    <select id="getList" resultType="productVO">
+        <!--   SELECT * FROM PRODUCT WHERE prod_writer = #{writer} -->
+        SELECT a.*,
+               b.category_nav
+        FROM product a
+        LEFT JOIN (SELECT concat(A1.GROUP_ID, A1.CATEGORY_ID) AS CATEGORY_KEY,
+                          CASE A1.CATEGORY_PARENT_LV
+                            WHEN 0 THEN A1.CATEGORY_DETAIL_NM
+                            WHEN 1 THEN CONCAT(A2.CATEGORY_DETAIL_NM, ' > ', A1.CATEGORY_DETAIL_NM)
+                            WHEN 2 THEN CONCAT(A3.CATEGORY_DETAIL_NM, ' > ', A2.CATEGORY_DETAIL_NM, ' > ', A1.CATEGORY_DETAIL_NM)
+                          END AS category_nav
+                   FROM product_category A1
+                   LEFT JOIN product_category A2
+                   ON A1.CATEGORY_PARENT_LV = A2.CATEGORY_LV
+                   AND A1.CATEGORY_DETAIL_PARENT_LV = A2.CATEGORY_DETAIL_LV
+                   AND A1.GROUP_ID = A2.GROUP_ID
+                   LEFT JOIN product_category A3
+                   ON A2.CATEGORY_PARENT_LV = A3.CATEGORY_LV
+                   AND A2.CATEGORY_DETAIL_PARENT_LV = A3.CATEGORY_DETAIL_LV) b
+        ON PROD_CATEGORY = b.CATEGORY_KEY
+        WHERE PROD_WRITER = #{writer}
+        order by a.prod_id desc
+        limit #{cri.pageStart}, #{cri.amount}
+    </select>
+
+    <!-- 모달창 이미지 가져오기 -->
+    <select id="getProductImg" resultType="ProductUploadVO">
+        SELECT * FROM product_upload WHERE prod_id = #{prod_id}
+    </select>
+
+    <select id="getTotal" resultType="int">
+        SELECT COUNT(*) as total FROM product
+        where prod_writer = #{writer}
+        <if test="cri.searchName != '' and cri.searchName != null">
+            and prod_name like concat('%', #{cri.searchName},'%')
+        </if>
+        <if test="cri.searchContent != '' and cri.searchContent != null">
+            and prod_content like concat('%', #{cri.searchContent}, '%')
+        </if>
+        <if test="cri.startDate != '' and cri.startDate != null">
+            <!-- <![CDATA [ 순수 문자열 ] ]>  -->
+            <![CDATA[and PROD_ENDDATE >= #{cri.startDate} ]]>
+        </if>
+        <if test="cri.endDate != '' and cri.endDate != null">
+            <![CDATA[and prod_enddate <= #{cri.endDate} ]]>
+        </if>
+    </select>
+
+    <select id="getDetail" resultType="productVO">
+        SELECT *
+        FROM PRODUCT a
+        LEFT JOIN (SELECT concat(A1.GROUP_ID, A1.CATEGORY_ID) AS CATEGORY_KEY,
+                          CASE A1.CATEGORY_PARENT_LV
+                                WHEN 0 THEN A1.CATEGORY_DETAIL_NM
+                                WHEN 1 THEN CONCAT(A2.CATEGORY_DETAIL_NM, ' > ', A1.CATEGORY_DETAIL_NM)
+                                WHEN 2 THEN CONCAT(A3.CATEGORY_DETAIL_NM, ' > ', A2.CATEGORY_DETAIL_NM, ' > ', A1.CATEGORY_DETAIL_NM)
+                          END AS category_nav
+                    FROM product_category A1
+                    LEFT JOIN product_category A2
+                    ON A1.CATEGORY_PARENT_LV = A2.CATEGORY_LV
+                    AND A1.CATEGORY_DETAIL_PARENT_LV = A2.CATEGORY_DETAIL_LV
+                    AND A1.GROUP_ID = A2.GROUP_ID
+                    LEFT JOIN product_category A3
+                    ON A2.CATEGORY_PARENT_LV = A3.CATEGORY_LV
+                    AND A2.CATEGORY_DETAIL_PARENT_LV = A3.CATEGORY_DETAIL_LV) b
+        ON a.PROD_CATEGORY = b.CATEGORY_KEY
+        WHERE prod_id = #{prod_id}
+    </select>
+
+    <update id="productUpdate" parameterType="productVo">
+        UPDATE PRODUCT
+        SET prod_enddate     = #{prod_enddate}
+          , prod_name        = #{prod_name}
+          , prod_price       = #{prod_price}
+          , prod_count       = #{prod_count}
+          , prod_discount    = #{prod_discount}
+          , prod_purchase_yn = #{prod_purchase_yn}
+          , prod_content     = #{prod_content}
+          , prod_comment     = #{prod_comment}
+        WHERE prod_id = #{prod_id}
+          AND prod_writer = #{prod_writer}
+    </update>
+
+    <delete id="productDelete">
+        DELETE
+        FROM PRODUCT
+        WHERE prod_id = #{prod_id}
+    </delete>
+
+    <!--  카테고리 처리  -->
+    <select id="getCategory" resultType="CategoryVO">
+        select *
+        from product_category
+        where category_lv = 1
+    </select>
+
+    <!--  하위 카테고리 처리  -->
+    <select id="getCategoryChild" resultType="CategoryVO">
+        select *
+        from product_category
+        where group_id = #{group_id}
+          and category_parent_lv = #{category_lv}
+          and category_detail_parent_lv = #{category_detail_lv}
+    </select>
+</mapper>
